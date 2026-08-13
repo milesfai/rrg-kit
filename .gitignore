@@ -1,0 +1,10 @@
+# Generated output — rebuilt by `update.py` and by CI.
+# The plotly charts alone are ~50MB per rebuild, so nothing here is tracked;
+# the lightweight dashboards are published to GitHub Pages instead.
+output/
+
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+site/
