@@ -476,6 +476,13 @@ page is missing, so a bad data day can't quietly replace a good build.
 Nothing needs to run on your Mac for this, and no secrets are required — the
 data source is public.
 
+**Live site:** <https://milesfai.github.io/rrg-kit/>
+
+Each universe is retried up to three times with backoff, because Yahoo
+Finance intermittently throttles datacenter IPs — the single most likely
+cause of a failed run. If a run does fail, the previous deploy stays up; fix
+by re-running the workflow from the Actions tab.
+
 ### Locally — cron (optional)
 
 If you also want local refreshes (they additionally build the plotly charts
