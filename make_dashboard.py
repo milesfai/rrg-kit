@@ -37,7 +37,15 @@ def out_paths() -> tuple[str, str]:
 def REFRESH_CMD() -> str:
     u = ("" if config.UNIVERSE == config.DEFAULT_UNIVERSE
          else f" --universe {config.UNIVERSE}")
-    return (f"cd {KIT_DIR} && python3 update.py{u} && "
+    # The absolute `cd` is load-bearing locally and only there. The button
+    # exists so a double-clicked output/<u>/dashboard.html can hand you a
+    # command that pastes into a Terminal sitting anywhere, and OUTPUT_DIR
+    # is relative (config.py:188), so the kit root has to be named. On a CI
+    # build KIT_DIR is the runner's ephemeral checkout — /home/runner/work/…
+    # — a path that exists on no reader's machine and not even on the runner
+    # once the job ends. Publish the location-independent form there.
+    where = "" if os.environ.get("GITHUB_ACTIONS") else f"cd {KIT_DIR} && "
+    return (f"{where}python3 update.py{u} && "
             f"python3 make_dashboard.py{u}")
 
 TAIL = 12          # trail length drawn behind the head

@@ -66,6 +66,25 @@ def download_prices(tickers: list[str], benchmark: str, period: str = "3y"):
                       auto_adjust=True, progress=False)
     close = raw["Close"][to_fetch].dropna(how="all")
     volume = raw["Volume"][tickers].reindex(close.index)
+    # Yahoo throttles datacenter IPs by dropping symbols from the response
+    # rather than erroring, and yfinance turns each dropped symbol into an
+    # all-NaN column. Everything downstream tolerates that — rrg() drops NaN
+    # rows, update.py skips series shorter than 2 bars, make_dashboard.py
+    # skips empty ones — so the run would exit 0 and publish a clean-looking
+    # chart quietly missing members, with CI's retry loop never firing. A
+    # missing constituent is a WRONG chart, not a thin one. Checked here,
+    # before synthetic_index: `close[members].dropna(how="any")` turns one
+    # NaN member into an all-NaN =EW benchmark, which blanks the universe.
+    have = close.notna().sum()
+    typical = have[have > 0].median()
+    dead = [c for c in to_fetch if have.get(c, 0) == 0]
+    thin = [c for c in to_fetch if 0 < have.get(c, 0) < 0.8 * typical]
+    if dead or thin:
+        raise SystemExit(
+            f"incomplete Yahoo download — no data: {dead or '[]'}; short "
+            f"history: {thin or '[]'}. Usually throttling; rerunning is the "
+            f"first thing to try. If a symbol is permanently retired or "
+            f"renumbered, remove it from config.UNIVERSES.")
     if synthetic:
         close = close.copy()
         close[benchmark] = synthetic_index(close, tickers, benchmark[1:])
