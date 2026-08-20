@@ -1,0 +1,85 @@
+name: Rebuild RRG dashboards
+
+# Fridays 22:00 UTC — 18:00 New York (after the US close), 06:00 Saturday
+# Hong Kong. Also runnable on demand from the Actions tab.
+on:
+  schedule:
+    - cron: "0 22 * * 5"
+  workflow_dispatch:
+
+# Least privilege: the job only needs to read the repo and publish Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two rebuilds deploy at once; a queued run supersedes a waiting one
+# but is not cancelled mid-flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Yahoo Finance throttles datacenter IPs from time to time, which shows
+      # up as an empty or partial download rather than a clean error. Retry a
+      # few times with backoff before giving up on a universe.
+      - name: Rebuild every universe
+        run: |
+          set -uo pipefail
+          fail=0
+          for u in $(python3 -c "import config; print(' '.join(config.UNIVERSES))"); do
+            echo "::group::$u"
+            ok=0
+            for attempt in 1 2 3; do
+              if python3 update.py --universe "$u" && \
+                 python3 make_dashboard.py --universe "$u"; then
+                ok=1; break
+              fi
+              echo "::warning::$u failed (attempt $attempt/3) — retrying"
+              sleep $((attempt * 30))
+            done
+            [ "$ok" = 1 ] || { echo "::error::$u failed after 3 attempts"; fail=1; }
+            echo "::endgroup::"
+          done
+          exit $fail
+
+      - name: Assemble the site
+        run: python3 build_site.py
+
+      # Guard: a silent Yahoo failure would otherwise deploy an empty site
+      # over a good one. Refuse to publish unless every page is present.
+      - name: Verify the build
+        run: |
+          set -euo pipefail
+          test -f site/index.html
+          for u in $(python3 -c "import config; print(' '.join(config.UNIVERSES))"); do
+            test -s "site/$u.html" || { echo "missing site/$u.html"; exit 1; }
+          done
+          echo "site OK: $(du -sh site | cut -f1), $(ls site/*.html | wc -l) pages"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
