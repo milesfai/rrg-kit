@@ -68,19 +68,46 @@ def run(timeframe: str, close, volume, theme: str, tail: int | None,
     print(summ.to_string(index=False))
     summ.to_csv(os.path.join(config.OUTPUT_DIR,
                              f"rrg_{timeframe}_summary.csv"), index=False)
-    events = detect_events(table, tf["label"].lower())
-    fresh = append_new(events, os.path.join(config.OUTPUT_DIR, "alerts.log"))
-    if fresh:
-        print(f"\n*** ROTATION ALERTS ({len(fresh)} new) ***")
-        for e in fresh:
+    # Detect events for EVERY bar in the exported history, not just the last
+    # one: a run that comes a month after the previous one would otherwise
+    # never log the crossings in between, and a fresh CI runner has no log
+    # at all. append_new() dedups by (date|tf|ticker|kind), so this is
+    # idempotent and cheap (a few hundred small slices).
+    log_path = os.path.join(config.OUTPUT_DIR, "alerts.log")
+    tf_label = tf["label"].lower()
+    hist_dates = sorted(table["date"].unique())[-n_hist:]
+    fresh, latest = [], table["date"].max()
+    for d in hist_dates:
+        fresh += append_new(detect_events(table[table["date"] <= d], tf_label),
+                            log_path)
+    _sort_log(log_path)
+    now_new = [e for e in fresh if e.startswith(f"{latest:%Y-%m-%d}")]
+    older = len(fresh) - len(now_new)
+    if now_new:
+        print(f"\n*** ROTATION ALERTS ({len(now_new)} new on {latest:%Y-%m-%d}"
+              f"{f', {older} backfilled for earlier bars' if older else ''}) ***")
+        for e in now_new:
             print(f"  {e}")
     else:
-        print("\nno new rotation alerts")
+        print(f"\nno new rotation alerts"
+              + (f" ({older} backfilled for earlier bars)" if older else ""))
 
     print(f"chart: {html_path}\ntable: {csv_path}")
     if anim_path:
         print(f"animation: {anim_path}")
     return summ
+
+
+def _sort_log(path: str) -> None:
+    """Keep alerts.log in chronological order (the dashboard reads it
+    newest-first by file order), stable within a date."""
+    try:
+        lines = [l for l in open(path).read().splitlines() if l.strip()]
+    except FileNotFoundError:
+        return
+    lines.sort(key=lambda l: l[:10])
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def summary(table: pd.DataFrame) -> pd.DataFrame:

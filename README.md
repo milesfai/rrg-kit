@@ -336,10 +336,10 @@ history so nothing rescales as you scrub.
 It only moves the chart — no table or metrics — but it *plays*, which is what
 you want for video capture.
 
-One honesty note: price history goes back years, but `alerts.log` only
-contains events from the day alert detection was first run. Scrub earlier
-than that and the alerts panel is legitimately empty — the chart and table
-are still fully accurate, since they're recomputed from prices.
+Alerts cover the whole exported history: every run re-detects events for
+each bar in `rrg_*_history.csv` (deduplicated, so re-runs are idempotent),
+so the alerts panel is populated for any date you scrub to — including weeks
+that fell between two runs, and on a fresh CI runner with no prior log.
 
 ### Export for reports and video
 

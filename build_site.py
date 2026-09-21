@@ -28,8 +28,16 @@ def universe_rows() -> list[dict]:
         src = os.path.join("output", name, "dashboard.html")
         if not os.path.exists(src):
             continue
+        # last bar in the data, so the index states data freshness honestly
+        # instead of the build time
+        try:
+            import csv
+            with open(os.path.join("output", name, "rrg_weekly.csv")) as f:
+                last = max(r["date"] for r in csv.DictReader(f))
+        except Exception:
+            last = "?"
         rows.append(dict(
-            name=name, label=spec["label"],
+            name=name, label=spec["label"], last=last,
             benchmark=spec.get("benchmark_label", spec["benchmark"]),
             members=len(spec["members"]),
             size_kb=round(os.path.getsize(src) / 1024),
@@ -70,7 +78,8 @@ code{{font-family:ui-monospace,Menlo,monospace;font-size:12px}}
 Each page carries {history} weeks of history on a timeline you can scrub,
 plus conviction metrics and rotation alerts.</p>
 {rows}
-<footer>Data as of <b>{built}</b> &middot; rebuilt weekly by GitHub Actions.<br>
+<footer>Built <b>{built}</b> &middot; rebuilt weekly by GitHub Actions; each
+row states the last bar in its data.<br>
 The Update button inside each page is inert here &mdash; a static host cannot
 re-run the pipeline. Run <code>python3 update.py</code> locally for on-demand
 refreshes.<br>
@@ -96,7 +105,8 @@ def main() -> None:
         html_rows.append(
             f'<a class="row" href="{r["name"]}.html"><span class="t">'
             f'<b>{r["label"]}</b>'
-            f'<span>{r["members"]} members &middot; vs {r["benchmark"]}</span>'
+            f'<span>{r["members"]} members &middot; vs {r["benchmark"]}'
+            f' &middot; data to {r["last"]}</span>'
             f'</span><span class="kb">{r["size_kb"]} KB</span></a>')
 
     built = datetime.datetime.now(datetime.timezone.utc).strftime(

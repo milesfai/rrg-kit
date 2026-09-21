@@ -95,7 +95,7 @@ def load_timeframe(tf: str) -> dict | None:
                 series=series)
 
 
-def load_alerts(limit: int = 400) -> list[dict]:
+def load_alerts(limit: int = 1200) -> list[dict]:
     """All recent alerts, newest first, parsed so the page can filter by date."""
     p = os.path.join(config.OUTPUT_DIR, "alerts.log")
     if not os.path.exists(p):
