@@ -6,9 +6,11 @@ not the 5MB plotly files) into ./site/ and writes an index over them.
 
     python3 build_site.py           # -> site/
 
-The published pages are snapshots: a static host cannot re-run Python, so
-their Update button is inert by design. Freshness comes from CI rebuilding
-and redeploying on a schedule; the index states when that last happened.
+The published pages are snapshots: a static host cannot re-run Python.
+Freshness comes from CI rebuilding and redeploying — weekly on a schedule, or
+on demand: on a CI build the index's Refresh button (and each dashboard's
+Update button) opens the workflow's GitHub page, whose "Run workflow" rebuilds
+everything. The index states each page's last data bar.
 """
 
 from __future__ import annotations
@@ -72,17 +74,24 @@ color:var(--muted);letter-spacing:.05em}}
 footer{{margin-top:24px;padding-top:16px;border-top:1px solid var(--line);
 font-size:12.5px;color:var(--muted);line-height:1.6}}
 code{{font-family:ui-monospace,Menlo,monospace;font-size:12px}}
+.top{{display:flex;align-items:baseline;justify-content:space-between;
+gap:12px;flex-wrap:wrap;margin-bottom:4px}}
+.top h1{{margin:0}}
+a.btn{{font-family:ui-monospace,Menlo,monospace;font-size:11px;
+letter-spacing:.06em;text-transform:uppercase;padding:7px 14px;
+border:1px solid var(--line);border-radius:4px;color:inherit;
+text-decoration:none;white-space:nowrap}}
+a.btn:hover{{border-color:var(--accent)}}
+a.btn:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
 </style></head><body><div class="w">
-<h1>Relative Rotation Graphs</h1>
+<div class="top"><h1>Relative Rotation Graphs</h1>{refresh}</div>
 <p class="sub">Rebuilt automatically every week from Yahoo Finance data.
 Each page carries {history} weeks of history on a timeline you can scrub,
 plus conviction metrics and rotation alerts.</p>
 {rows}
 <footer>Built <b>{built}</b> &middot; rebuilt weekly by GitHub Actions; each
 row states the last bar in its data.<br>
-The Update button inside each page is inert here &mdash; a static host cannot
-re-run the pipeline. Run <code>python3 update.py</code> locally for on-demand
-refreshes.<br>
+{refresh_note}<br>
 Standard public approximation of JdK RS-Ratio / RS-Momentum. Sector rotation
 is context, not a trade trigger; not investment advice.</footer>
 </div></body></html>"""
@@ -111,8 +120,20 @@ def main() -> None:
 
     built = datetime.datetime.now(datetime.timezone.utc).strftime(
         "%d %b %Y %H:%M UTC")
+    url = config.ci_refresh_url()
+    if url:
+        refresh = (f'<a class="btn" href="{url}" target="_blank" '
+                   f'rel="noopener">Refresh now</a>')
+        note = ("<b>Refresh now</b> opens GitHub Actions &mdash; click "
+                "<i>Run workflow</i> and every page is rebuilt from fresh "
+                "data in about two minutes.")
+    else:
+        refresh = ""
+        note = ("Run <code>python3 update.py</code> locally for on-demand "
+                "refreshes.")
     page = INDEX.format(rows="".join(html_rows), built=built,
-                        history=config.HISTORY_PERIODS.get("weekly", 78))
+                        history=config.HISTORY_PERIODS.get("weekly", 78),
+                        refresh=refresh, refresh_note=note)
     with open(os.path.join(SITE, "index.html"), "w") as f:
         f.write(page)
 

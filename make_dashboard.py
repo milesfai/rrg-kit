@@ -142,6 +142,7 @@ def build(frames: dict, alerts: list) -> str:
         "tail": TAIL, "moveW": MOVE_W, "shapeW": SHAPE_W,
         "benchmark": config.BENCHMARK_LABEL,
         "cmd": REFRESH_CMD(),
+        "refreshUrl": config.ci_refresh_url(),
         "title": config.LABEL,
     }, separators=(",", ":"))
 
@@ -1216,9 +1217,13 @@ function showResult(url, filename, dims, isSvg) {{
 }})();
 
 // ── Update button ──────────────────────────────────────────────────────────
-// Static pages can't run Python. When served by serve.py an API is present and
-// the button re-runs the pipeline for real; otherwise it degrades to handing
-// over the command to run.
+// Static pages can't run Python. Three cases:
+//   served by serve.py ......... an API is present; the button re-runs the
+//                                pipeline for real
+//   published by GitHub Actions  D.refreshUrl is set; the button opens the
+//                                workflow page, whose "Run workflow" rebuilds
+//                                and redeploys the whole site
+//   anything else .............. it hands over the command to run
 (function () {{
   if (!document.querySelector('meta[name="viewport"]')) {{
     var mv = document.createElement('meta');
@@ -1230,6 +1235,8 @@ function showResult(url, filename, dims, isSvg) {{
   var label = document.getElementById('upd-label');
   var msg = document.getElementById('upd-msg');
   var live = false;
+  var gh = D.refreshUrl || null;
+  var STATIC_LABEL = gh ? 'Refresh on GitHub' : 'Copy refresh command';
 
   function say(text, cls, cmd) {{
     msg.className = 'updmsg' + (cls ? ' ' + cls : '');
@@ -1256,12 +1263,14 @@ function showResult(url, filename, dims, isSvg) {{
       return r.json();
     }});
   }}
-  ask('api/status').then(function (s) {{
+  // A CI-published page lives on a static host that never has the API, so
+  // don't probe: it would only log a 404 and hold the button disabled.
+  if (gh) {{ mode('static', STATIC_LABEL); }}
+  else ask('api/status').then(function (s) {{
     live = !!(s && s.live);
-    mode(live ? 'live' : 'static',
-         live ? 'Update data' : 'Copy refresh command');
+    mode(live ? 'live' : 'static', live ? 'Update data' : STATIC_LABEL);
     if (live && s.running) poll();
-  }}).catch(function () {{ mode('static', 'Copy refresh command'); }});
+  }}).catch(function () {{ mode('static', STATIC_LABEL); }});
 
   function poll() {{
     mode('busy', 'Updating\\u2026');
@@ -1278,6 +1287,13 @@ function showResult(url, filename, dims, isSvg) {{
     }})();
   }}
   btn.addEventListener('click', function () {{
+    if (!live && gh) {{
+      window.open(gh, '_blank', 'noopener');
+      say('Opened GitHub Actions. Click \\u201cRun workflow\\u201d, then the ' +
+          'green \\u201cRun workflow\\u201d button. The site rebuilds in about ' +
+          'two minutes \\u2014 then reload this page.', 'ok');
+      return;
+    }}
     if (!live) {{
       var done = function () {{
         say('Run this in Terminal, then reload this page:', null, D.cmd);

@@ -168,6 +168,25 @@ def is_synthetic(benchmark: str | None = None) -> bool:
     return (benchmark or BENCHMARK).startswith(SYNTHETIC)
 
 
+def ci_refresh_url() -> str | None:
+    """On a GitHub Actions build: the page of the workflow that built it,
+    whose "Run workflow" button rebuilds and redeploys the site. None on a
+    local build, which has serve.py's real Update button instead.
+
+    Derived from the runner's own environment, so a fork publishes a link to
+    its own Actions page rather than this repo's."""
+    import os
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not repo:
+        return None
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    # e.g. "owner/repo/.github/workflows/update.yml@refs/heads/main"
+    ref = os.environ.get("GITHUB_WORKFLOW_REF", "")
+    wf = (ref.split("@")[0].rsplit("/", 1)[-1]
+          if "/.github/workflows/" in ref else "update.yml")
+    return f"{server}/{repo}/actions/workflows/{wf}"
+
+
 def display_ticker(ticker: str) -> str:
     """Chart-label form of a ticker: '0700.HK' -> '0700'. Data files and
     alerts keep the full Yahoo symbol; only visual labels are shortened."""
